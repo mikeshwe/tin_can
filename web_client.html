@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-to-AI Appointment Scheduling - Live Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.7/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .status {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 8px;
+            background: #333;
+            border-radius: 4px;
+        }
+        .status-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .participants {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .participant {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #444;
+        }
+        .participant.active {
+            border-color: #4CAF50;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+        }
+        .participant h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        .transcript {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .transcript-line {
+            margin: 10px 0;
+            padding: 8px;
+            border-left: 3px solid #4CAF50;
+            background: #2a2a2a;
+        }
+        .transcript-line.doctor {
+            border-left-color: #2196F3;
+        }
+        .transcript-line.patient {
+            border-left-color: #FF9800;
+        }
+        .speaker {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .speaker.doctor {
+            color: #2196F3;
+        }
+        .speaker.patient {
+            color: #FF9800;
+        }
+        .audio-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+            margin-left: 10px;
+        }
+        .audio-indicator.active {
+            background: #4CAF50;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .connection-form {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .error {
+            background: #f44336;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .audio-control {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #FF9800;
+            padding: 30px 50px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            text-align: center;
+            z-index: 9999;
+            display: none;
+        }
+        .audio-control.visible {
+            display: block;
+        }
+        .audio-control button {
+            background: #4CAF50;
+            font-size: 24px;
+            padding: 20px 40px;
+            margin: 20px 0;
+        }
+        .audio-control h2 {
+            margin-top: 0;
+            color: white;
+        }
+        /* Restart status modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.visible {
+            display: flex;
+        }
+        .modal-box {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 32px 40px;
+            min-width: 380px;
+            max-width: 480px;
+        }
+        .modal-box h2 {
+            margin: 0 0 24px;
+            color: #9C27B0;
+            font-size: 18px;
+        }
+        .modal-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            color: #666;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+        .modal-step.active { color: #fff; }
+        .modal-step.done { color: #4CAF50; }
+        .modal-step .icon { font-size: 18px; width: 24px; text-align: center; }
+        .modal-spinner {
+            width: 18px; height: 18px;
+            border: 2px solid #555;
+            border-top-color: #9C27B0;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>🎙️ AI-to-AI Appointment Scheduling - Live Monitor</h1>
+
+    <!-- Restart Status Modal -->
+    <div class="modal-overlay" id="restartModal">
+        <div class="modal-box">
+            <h2>🔄 Restarting Demo...</h2>
+            <div class="modal-step" id="step-kill">
+                <span class="icon">⏹</span> Stopping existing agents
+            </div>
+            <div class="modal-step" id="step-clear">
+                <span class="icon">🗑</span> Clearing logs &amp; transcript
+            </div>
+            <div class="modal-step" id="step-launch">
+                <span class="icon">🚀</span> Launching Doctor &amp; Patient agents
+            </div>
+            <div class="modal-step" id="step-room">
+                <span class="icon">🏠</span> Waiting for LiveKit room
+            </div>
+            <div class="modal-step" id="step-connect">
+                <span class="icon">🔗</span> Connecting web client to room
+            </div>
+            <div class="modal-step" id="step-wait">
+                <span class="icon">🎙</span> Waiting for agents to start speaking (~20s)
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Enable Overlay -->
+    <div class="audio-control" id="audioControl">
+        <h2>🔊 Audio Ready!</h2>
+        <p style="color: white; margin: 15px 0;">Click the button below to hear the conversation</p>
+        <button onclick="enableAudio()" id="enableAudioBtn">
+            🎵 ENABLE AUDIO
+        </button>
+    </div>
+
+    <div class="connection-form">
+        <h3>Quick Start</h3>
+        <button onclick="restartDemo()" id="restartBtn" style="background: #9C27B0; font-size: 18px; padding: 15px 30px;">
+            🔄 Restart Demo
+        </button>
+        <button onclick="stopConversation()" id="stopBtn" style="background: #f44336;">
+            Stop Conversation
+        </button>
+        <div style="margin: 20px 0; padding: 10px; background: #333; border-radius: 4px; font-size: 12px;">
+            Click "Restart Demo" to kill any running agents, clear logs, and launch fresh agents in a new room.
+        </div>
+
+        <input type="hidden" id="roomName" />
+        <input type="hidden" id="wsUrl" />
+        <input type="hidden" id="token" />
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+
+    <div class="status">
+        <div class="status-item">
+            <span class="status-label">Room Status:</span>
+            <span id="roomStatus">Not Connected</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Participants:</span>
+            <span id="participantCount">0</span>
+        </div>
+    </div>
+
+    <div class="participants">
+        <div class="participant" id="doctorParticipant">
+            <h3>👨‍⚕️ Doctor Agent <span class="audio-indicator" id="doctorAudio"></span></h3>
+            <div>Status: <span id="doctorStatus">Waiting...</span></div>
+        </div>
+        <div class="participant" id="patientParticipant">
+            <h3>🧑‍💼 Patient Agent <span class="audio-indicator" id="patientAudio"></span></h3>
+            <div>Status: <span id="patientStatus">Waiting...</span></div>
+        </div>
+    </div>
+
+    <h2>📝 Live Transcript</h2>
+    <div class="transcript" id="transcript">
+        <div style="color: #666;">Waiting for conversation to begin...</div>
+    </div>
+
+    <!-- Recording Playback Section -->
+    <div id="recordingSection" style="display: none; margin: 20px 0; background: #2a2a2a; padding: 20px; border-radius: 8px;">
+        <h2>🎧 Conversation Recording</h2>
+        <div id="recordingStatus" style="margin: 15px 0; padding: 10px; background: #333; border-radius: 4px;">
+            <span id="recordingStatusText">Processing recording...</span>
+        </div>
+        <audio id="recordingPlayer" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
+    </div>
+
+    <audio id="doctorAudioElement" autoplay></audio>
+    <audio id="patientAudioElement" autoplay></audio>
+
+    <script>
+        // Wait for LiveKit SDK to load
+        let room = null;
+        let audioUnlocked = false;
+
+        async function unlockAudio() {
+            if (audioUnlocked) return;
+            try {
+                const ctx = new AudioContext();
+                await ctx.resume();
+                // Play a silent buffer to satisfy browser autoplay policy
+                const buf = ctx.createBuffer(1, 1, 22050);
+                const src = ctx.createBufferSource();
+                src.buffer = buf;
+                src.connect(ctx.destination);
+                src.start(0);
+                audioUnlocked = true;
+                console.log('🔓 Audio context unlocked');
+            } catch(e) {
+                console.warn('Audio unlock failed:', e);
+            }
+        }
+
+        let transcriptLines = [];
+        let audioElements = []; // Store all audio elements
+        let audioEnabled = false;
+        let currentRoomName = null; // Track current room for recording
+
+        function checkSDK() {
+            console.log('Checking for LiveKit SDK...');
+            console.log('window.LivekitClient:', window.LivekitClient);
+            console.log('window keys:', Object.keys(window).filter(k => k.toLowerCase().includes('live')));
+
+            if (!window.LivekitClient) {
+                console.error('LiveKit SDK not found on window');
+                showError('LiveKit SDK failed to load. Check browser console for details.');
+                return false;
+            }
+            console.log('LiveKit SDK loaded successfully');
+            return true;
+        }
+
+        // Check SDK on load
+        window.addEventListener('load', () => {
+            setTimeout(checkSDK, 100);
+        });
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function addTranscript(speaker, text, type) {
+            const timestamp = new Date().toLocaleTimeString();
+            transcriptLines.push({speaker, text, type, timestamp});
+
+            const transcriptDiv = document.getElementById('transcript');
+            const line = document.createElement('div');
+            line.className = `transcript-line ${type}`;
+            line.innerHTML = `
+                <div class="speaker ${type}">[${timestamp}] ${speaker}</div>
+                <div>${text}</div>
+            `;
+            transcriptDiv.appendChild(line);
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        async function generateToken(roomName, identity) {
+            // This would normally call your backend to generate a token
+            // For now, you'll need to generate it manually using the LiveKit CLI or API
+            showError('Please generate a token manually using your LiveKit credentials');
+            return null;
+        }
+
+        async function connect() {
+            const roomName = document.getElementById('roomName').value;
+            const wsUrl = document.getElementById('wsUrl').value;
+            let token = document.getElementById('token').value;
+
+            if (!roomName || !wsUrl) {
+                showError('Please enter room name and WebSocket URL');
+                return;
+            }
+
+            if (!token) {
+                showError('Please provide an access token. Generate one using: python generate_token.py');
+                return;
+            }
+
+            if (!window.LivekitClient) {
+                showError('LiveKit SDK is not loaded. Please refresh the page.');
+                console.error('LiveKit client is not defined');
+                return;
+            }
+
+            try {
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    autoSubscribe: true, // CRITICAL: Auto-subscribe to all tracks!
+                });
+
+                // Set up event listeners
+                room.on(LivekitClient.RoomEvent.Connected, () => {
+                    console.log('Connected to room');
+                    document.getElementById('roomStatus').textContent = 'Connected';
+                });
+
+                room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+                    console.log('Disconnected from room, reason:', reason);
+                    document.getElementById('roomStatus').textContent = 'Disconnected';
+                });
+
+                room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+                    console.log('Participant connected:', participant.identity);
+                    console.log('Participant details:', {
+                        identity: participant.identity,
+                        kind: participant.kind,
+                        trackPublications: participant.trackPublications.size
+                    });
+
+                    // Debug: Iterate through trackPublications Map
+                    console.log('🔍 Iterating through trackPublications Map:');
+                    participant.trackPublications.forEach((pub, sid) => {
+                        console.log('  Publication SID:', sid, 'Kind:', pub.kind, 'Source:', pub.source, 'Subscribed:', pub.isSubscribed);
+                    });
+
+                    updateParticipantCount();
+                    handleParticipant(participant);
+
+                    // Try to manually subscribe to tracks after delays
+                    // Check multiple times since agents may take a while to publish
+                    [2000, 5000, 8000, 12000].forEach(delay => {
+                        setTimeout(() => {
+                            console.log(`⏰ Checking for tracks after ${delay/1000} seconds...`);
+                            console.log('Participant now has', participant.trackPublications.size, 'track publications');
+
+                            if (participant.trackPublications.size > 0) {
+                                participant.trackPublications.forEach((pub, key) => {
+                                    if (pub.kind === 'audio' && !pub.isSubscribed) {
+                                        console.log('🔄 Manually subscribing to audio track:', pub.trackSid);
+                                        pub.setSubscribed(true);
+                                    }
+                                });
+                            }
+                        }, delay);
+                    });
+                });
+
+                room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+                    console.log('Participant disconnected:', participant.identity);
+                    updateParticipantCount();
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackPublished, (publication, participant) => {
+                    console.log('🎤 Track published:', publication.kind, 'from', participant.identity);
+                    console.log('Track publication details:', {
+                        kind: publication.kind,
+                        source: publication.source,
+                        trackSid: publication.trackSid
+                    });
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    const trackName = publication.trackName || '';
+                    console.log('🎵 Track subscribed:', track.kind, 'name:', trackName, 'from', participant.identity);
+
+                    if (track.kind === LivekitClient.Track.Kind.Audio || track.kind === 'audio') {
+                        const isDoctor = trackName.includes('doctor');
+                        const isPatient = trackName.includes('patient');
+                        console.log('📢 Attaching and autoplaying audio from', participant.identity, '(', trackName, ')');
+
+                        // Update participant UI based on track name
+                        if (isDoctor) {
+                            document.getElementById('doctorStatus').textContent = 'Connected';
+                            document.getElementById('doctorParticipant').classList.add('active');
+                        } else if (isPatient) {
+                            document.getElementById('patientStatus').textContent = 'Connected';
+                            document.getElementById('patientParticipant').classList.add('active');
+                        }
+                        updateParticipantCount();
+
+                        try {
+                            const audioElement = track.attach();
+                            audioElement.volume = 1.0;
+                            audioElement.muted = false;
+                            document.body.appendChild(audioElement);
+                            audioElement.play().then(() => {
+                                console.log('✅ Audio playing from', participant.identity, '(', trackName, ')');
+                                audioEnabled = true;
+                                document.getElementById('audioControl').classList.remove('visible');
+                            }).catch(err => {
+                                console.warn('⚠️ Autoplay blocked, showing button:', err.message);
+                                audioElements.push({ element: audioElement, participant: participant.identity });
+                                document.getElementById('audioControl').classList.add('visible');
+                            });
+
+                            // Show audio indicator
+                            const audioIndicator = isDoctor ?
+                                document.getElementById('doctorAudio') :
+                                document.getElementById('patientAudio');
+                            if (audioIndicator) audioIndicator.classList.add('active');
+                        } catch (err) {
+                            console.error('❌ Error attaching audio track:', err);
+                        }
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+                    // Update UI to show who's speaking
+                    document.getElementById('doctorAudio').classList.remove('active');
+                    document.getElementById('patientAudio').classList.remove('active');
+
+                    speakers.forEach(speaker => {
+                        // Identify by track name since agent identities are random
+                        let isDoctor = speaker.identity.includes('doctor');
+                        speaker.trackPublications.forEach(pub => {
+                            if ((pub.trackName || '').includes('doctor')) isDoctor = true;
+                        });
+                        const audioIndicator = isDoctor ?
+                            document.getElementById('doctorAudio') :
+                            document.getElementById('patientAudio');
+                        if (audioIndicator) audioIndicator.classList.add('active');
+                    });
+                });
+
+                // Connect to the room
+                console.log('Connecting to room with URL:', wsUrl);
+                await room.connect(wsUrl, token);
+                console.log('Connected! Room has', room.remoteParticipants.size, 'remote participants');
+
+                // Debug: Check room-level track information
+                console.log('🔍 Room state after connection:');
+                console.log('  Local participant:', room.localParticipant.identity);
+                console.log('  Local participant kind:', room.localParticipant.kind);
+                console.log('  Room name:', room.name);
+                console.log('  Room state:', room.state);
+
+                // Don't enable microphone - we're just listening
+                // This avoids browser permission issues
+
+                // Handle existing participants
+                console.log('Processing existing participants...');
+                room.remoteParticipants.forEach(participant => {
+                    console.log('Found existing participant:', participant.identity, 'with', participant.trackPublications.size, 'tracks');
+                    handleParticipant(participant);
+
+                    // Poll for tracks since they might not be synced yet
+                    // Check multiple times since agents may have already published but we just joined
+                    [2000, 5000, 8000, 12000].forEach(delay => {
+                        setTimeout(() => {
+                            console.log(`⏰ [EXISTING] Checking for tracks from ${participant.identity} after ${delay/1000}s...`);
+                            console.log('Participant now has', participant.trackPublications.size, 'track publications');
+
+                            if (participant.trackPublications.size > 0) {
+                                participant.trackPublications.forEach((pub, key) => {
+                                    console.log('Found publication:', {
+                                        trackSid: pub.trackSid,
+                                        kind: pub.kind,
+                                        source: pub.source,
+                                        isSubscribed: pub.isSubscribed
+                                    });
+
+                                    if (pub.kind === 'audio' && !pub.isSubscribed) {
+                                        console.log('🔄 Manually subscribing to existing audio track:', pub.trackSid);
+                                        pub.setSubscribed(true);
+                                    } else if (pub.kind === 'audio' && pub.track && pub.isSubscribed) {
+                                        const alreadyAttached = audioElements.some(ae => ae.participant === participant.identity);
+                                        if (!alreadyAttached && pub.track) {
+                                            console.log('📢 Attaching existing subscribed track from', participant.identity);
+                                            const audioElement = pub.track.attach();
+                                            audioElement.volume = 1.0;
+                                            audioElement.muted = false;
+                                            document.body.appendChild(audioElement);
+                                            audioElements.push({ element: audioElement, participant: participant.identity });
+                                            audioElement.play().catch(err => {
+                                                console.warn('⚠️ Autoplay blocked:', err.message);
+                                                document.getElementById('audioControl').classList.add('visible');
+                                            });
+                                        }
+                                    }
+                                });
+                            } else {
+                                console.warn(`⚠️ [EXISTING] Still no tracks from ${participant.identity} after ${delay/1000}s`);
+                            }
+                        }, delay);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                showError(`Failed to connect: ${error.message}`);
+            }
+        }
+
+        function handleParticipant(participant) {
+            // Identify by track name (doctor-voice / patient-voice) since agent identities are random
+            let isDoctor = participant.identity.includes('doctor');
+            let isPatient = participant.identity.includes('patient');
+            participant.trackPublications.forEach(pub => {
+                const name = pub.trackName || '';
+                if (name.includes('doctor')) isDoctor = true;
+                if (name.includes('patient')) isPatient = true;
+            });
+
+            if (isDoctor) {
+                document.getElementById('doctorStatus').textContent = 'Connected';
+                document.getElementById('doctorParticipant').classList.add('active');
+            } else if (isPatient) {
+                document.getElementById('patientStatus').textContent = 'Connected';
+                document.getElementById('patientParticipant').classList.add('active');
+            }
+
+            // Subscribe to existing audio tracks
+            participant.trackPublications.forEach(publication => {
+                console.log('Found existing track:', publication.kind, 'from', participant.identity);
+                if (publication.track && publication.kind === 'audio') {
+                    const audioElement = publication.track.attach();
+                    audioElement.autoplay = false; // Don't autoplay
+                    audioElement.volume = 1.0;
+                    audioElement.muted = false;
+                    document.body.appendChild(audioElement);
+                    console.log('Attached existing audio track from', participant.identity);
+
+                    // Store for later playback
+                    audioElements.push({
+                        element: audioElement,
+                        participant: participant.identity
+                    });
+
+                    // Show the enable audio button if not already enabled
+                    if (!audioEnabled && audioElements.length > 0) {
+                        console.log('🔊 Showing enable audio button');
+                        document.getElementById('audioControl').classList.add('visible');
+                    }
+                }
+            });
+        }
+
+        // Enable audio playback with fresh user gesture
+        async function enableAudio() {
+            console.log('🎵 Enabling audio for', audioElements.length, 'tracks');
+            audioEnabled = true;
+
+            for (const {element, participant} of audioElements) {
+                try {
+                    await element.play();
+                    console.log('✅ Started playing audio from', participant);
+                } catch (err) {
+                    console.error('❌ Error playing audio from', participant, ':', err);
+                }
+            }
+
+            // Hide the enable audio button
+            document.getElementById('audioControl').classList.remove('visible');
+            console.log('🎉 Audio enabled successfully!');
+        }
+
+        function updateParticipantCount() {
+            if (room) {
+                // Count agents that have connected (doctor + patient status boxes)
+                const doctorConnected = document.getElementById('doctorStatus').textContent === 'Connected' ? 1 : 0;
+                const patientConnected = document.getElementById('patientStatus').textContent === 'Connected' ? 1 : 0;
+                const total = doctorConnected + patientConnected;
+                // Fall back to raw remote participant count if neither is identified yet
+                document.getElementById('participantCount').textContent =
+                    total > 0 ? total : room.remoteParticipants.size;
+            }
+        }
+
+        async function disconnect() {
+            if (room) {
+                await room.disconnect();
+                room = null;
+                document.getElementById('roomStatus').textContent = 'Disconnected';
+                document.getElementById('participantCount').textContent = '0';
+                document.getElementById('doctorStatus').textContent = 'Waiting...';
+                document.getElementById('patientStatus').textContent = 'Waiting...';
+                document.getElementById('doctorParticipant').classList.remove('active');
+                document.getElementById('patientParticipant').classList.remove('active');
+
+                // Reset audio state
+                audioElements = [];
+                audioEnabled = false;
+                document.getElementById('audioControl').classList.remove('visible');
+            }
+        }
+
+        async function startNewConversation() {
+            const startBtn = document.getElementById('startBtn');
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting agents...';
+
+            try {
+                const response = await fetch('http://localhost:5001/api/start-conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Store room name for recording retrieval
+                    currentRoomName = data.room_name;
+
+                    // Hide recording section when starting new conversation
+                    document.getElementById('recordingSection').style.display = 'none';
+
+                    // Auto-fill the form
+                    document.getElementById('roomName').value = data.room_name;
+                    document.getElementById('wsUrl').value = data.ws_url;
+                    document.getElementById('token').value = data.token;
+
+                    console.log('Recording is being captured:', data.recording);
+
+                    startBtn.textContent = 'Connecting to agents...';
+
+                    // Auto-connect immediately
+                    setTimeout(() => {
+                        connect();
+                        startBtn.disabled = false;
+                        startBtn.textContent = 'Start New A2A Conversation';
+                    }, 500);
+                } else {
+                    showError('Failed to start conversation: ' + data.error);
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Start New A2A Conversation';
+                }
+            } catch (error) {
+                showError('Error starting conversation: ' + error.message);
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start New A2A Conversation';
+            }
+        }
+
+        async function stopConversation() {
+            try {
+                await fetch('http://localhost:5001/api/stop-conversation', {
+                    method: 'POST'
+                });
+                disconnect();
+
+                // Try to load the recording
+                if (currentRoomName) {
+                    loadRecording(currentRoomName);
+                }
+            } catch (error) {
+                showError('Error stopping conversation: ' + error.message);
+            }
+        }
+
+        function setStep(id, state) {
+            const el = document.getElementById(id);
+            el.className = 'modal-step ' + state;
+            if (state === 'active') {
+                el.querySelector('.icon').outerHTML = '<span class="modal-spinner"></span>';
+            } else if (state === 'done') {
+                // replace spinner or icon with checkmark
+                const first = el.firstElementChild;
+                if (first.classList && first.classList.contains('modal-spinner')) {
+                    first.outerHTML = '<span class="icon">✅</span>';
+                } else {
+                    first.textContent = '✅';
+                }
+            }
+        }
+
+        async function restartDemo() {
+            await unlockAudio(); // Use the button click gesture to unlock audio
+            const restartBtn = document.getElementById('restartBtn');
+            restartBtn.disabled = true;
+            restartBtn.textContent = '⏳ Restarting...';
+
+            // Reset modal steps
+            ['step-kill','step-clear','step-launch','step-room','step-connect','step-wait'].forEach(id => {
+                const el = document.getElementById(id);
+                el.className = 'modal-step';
+                // restore original icons
+                const icons = {'step-kill':'⏹','step-clear':'🗑','step-launch':'🚀','step-room':'🏠','step-connect':'🔗','step-wait':'🎙'};
+                el.innerHTML = `<span class="icon">${icons[id]}</span> ` + el.textContent.trim().replace(/^[^\s]+\s/, '');
+            });
+            document.getElementById('restartModal').classList.add('visible');
+
+            // Step 1 — stopping agents
+            setStep('step-kill', 'active');
+            await new Promise(r => setTimeout(r, 300));
+
+            // Clear transcript and SSE immediately
+            disconnect();
+            if (transcriptEventSource) {
+                transcriptEventSource.close();
+                transcriptEventSource = null;
+            }
+            document.getElementById('transcript').innerHTML = '<div style="color: #666; font-style: italic;">Waiting for conversation to begin...</div>';
+            firstTranscript = true;
+            document.getElementById('recordingSection').style.display = 'none';
+
+            setStep('step-kill', 'done');
+            setStep('step-clear', 'active');
+            await new Promise(r => setTimeout(r, 300));
+            setStep('step-clear', 'done');
+            setStep('step-launch', 'active');
+
+            try {
+                // Step 2 — API call (blocks ~12s on server side)
+                const response = await fetch('http://localhost:5001/api/restart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                setStep('step-launch', 'done');
+                setStep('step-room', 'active');
+                await new Promise(r => setTimeout(r, 400));
+                setStep('step-room', 'done');
+                setStep('step-connect', 'active');
+
+                if (data.success) {
+                    currentRoomName = data.room_name;
+                    document.getElementById('roomName').value = data.room_name;
+                    document.getElementById('wsUrl').value = data.ws_url;
+                    document.getElementById('token').value = data.token;
+
+                    connect();
+                    connectTranscriptStream();
+                    setStep('step-connect', 'done');
+                    setStep('step-wait', 'active');
+                    restartBtn.disabled = false;
+                    restartBtn.textContent = '🔄 Restart Demo';
+                    // Close modal when first transcript line arrives
+                    const closeOnFirst = () => {
+                        setStep('step-wait', 'done');
+                        document.getElementById('restartModal').classList.remove('visible');
+                        document.removeEventListener('transcript-started', closeOnFirst);
+                    };
+                    document.addEventListener('transcript-started', closeOnFirst);
+                    // Fallback: close after 25s regardless
+                    setTimeout(() => {
+                        document.getElementById('restartModal').classList.remove('visible');
+                    }, 25000);
+                } else {
+                    document.getElementById('restartModal').classList.remove('visible');
+                    showError('Failed to restart: ' + data.error);
+                    restartBtn.disabled = false;
+                    restartBtn.textContent = '🔄 Restart Demo';
+                }
+            } catch (error) {
+                document.getElementById('restartModal').classList.remove('visible');
+                showError('Error restarting: ' + error.message);
+                restartBtn.disabled = false;
+                restartBtn.textContent = '🔄 Restart Demo';
+            }
+        }
+
+        async function loadRecording(roomName) {
+            console.log('Loading recording for room:', roomName);
+
+            // Show the recording section
+            document.getElementById('recordingSection').style.display = 'block';
+            document.getElementById('recordingStatusText').textContent = 'Processing recording... This may take a few seconds.';
+            document.getElementById('recordingPlayer').style.display = 'none';
+
+            // Try to load the recording with retries (egress needs time to finalize)
+            const maxRetries = 10;
+            const retryDelay = 3000; // 3 seconds
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    console.log(`Attempt ${i + 1}/${maxRetries} to fetch recording...`);
+
+                    const response = await fetch(`http://localhost:5001/api/recording/${roomName}`);
+
+                    if (response.ok) {
+                        // Recording is ready!
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+
+                        const player = document.getElementById('recordingPlayer');
+                        player.src = url;
+                        player.style.display = 'block';
+
+                        document.getElementById('recordingStatusText').textContent = 'Recording ready! Click play to listen:';
+                        console.log('Recording loaded successfully!');
+                        return;
+                    } else if (response.status === 404) {
+                        // Recording not ready yet, wait and retry
+                        console.log('Recording not ready yet, retrying in 3 seconds...');
+                        document.getElementById('recordingStatusText').textContent = `Waiting for recording to finalize... (Attempt ${i + 1}/${maxRetries})`;
+                        await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    } else {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error('Error loading recording:', error);
+
+                    if (i === maxRetries - 1) {
+                        document.getElementById('recordingStatusText').textContent = 'Recording could not be loaded. It may still be processing - try refreshing the page in a moment.';
+                    }
+                }
+            }
+
+            // If we get here, all retries failed
+            document.getElementById('recordingStatusText').textContent = 'Recording is still processing. Please wait a moment and check the recordings/ folder.';
+        }
+
+        // Connect to transcript stream
+        let transcriptEventSource = null;
+
+        function connectTranscriptStream() {
+            if (transcriptEventSource) {
+                transcriptEventSource.close();
+            }
+
+            transcriptEventSource = new EventSource('http://localhost:5001/api/transcript-stream');
+
+            // Buffer events for 300ms then flush sorted by server timestamp
+            let pendingEvents = [];
+            let flushTimer = null;
+
+            function flushPending() {
+                flushTimer = null;
+                if (!pendingEvents.length) return;
+                // Sort by server timestamp so doctor/patient lines appear in correct order
+                pendingEvents.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+                pendingEvents.forEach(data => displayTranscriptMessage(data));
+                pendingEvents = [];
+            }
+
+            transcriptEventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type !== 'says') return; // Only show spoken lines
+                pendingEvents.push(data);
+                if (flushTimer) clearTimeout(flushTimer);
+                flushTimer = setTimeout(flushPending, 300);
+            };
+
+            transcriptEventSource.onerror = function(error) {
+                console.error('Transcript stream error:', error);
+            };
+        }
+
+        let firstTranscript = true;
+        function displayTranscriptMessage(data) {
+            const transcriptDiv = document.getElementById('transcript');
+            const timestamp = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+
+            if (data.type === 'says') {
+                // Clear placeholder text on first real line
+                if (firstTranscript) {
+                    firstTranscript = false;
+                    transcriptDiv.innerHTML = '';
+                    document.dispatchEvent(new Event('transcript-started'));
+                }
+                const speakerClass = data.speaker === 'patient' ? 'patient' : 'doctor';
+                const speakerName = data.speaker === 'patient' ? '🤖 PATIENT' : '👨‍⚕️ DOCTOR';
+                line.className = `transcript-line ${speakerClass}`;
+                line.innerHTML = `
+                    <div class="speaker ${speakerClass}">[${timestamp}] ${speakerName}</div>
+                    <div>${data.text}</div>
+                `;
+                transcriptDiv.appendChild(line);
+            }
+
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        // Auto-fill connection details
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+
+            // Set default values or use URL parameters
+            if (params.get('room')) {
+                document.getElementById('roomName').value = params.get('room');
+                document.getElementById('wsUrl').value = params.get('url') || 'wss://tincan-mwvmg0g6.livekit.cloud';
+                document.getElementById('token').value = params.get('token') || '';
+            }
+
+            // Connect to transcript stream on page load
+            connectTranscriptStream();
+        });
+    </script>
+</body>
+</html>

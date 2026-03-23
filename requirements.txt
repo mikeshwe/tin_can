@@ -1,0 +1,7 @@
+livekit
+livekit-agents
+livekit-plugins-deepgram
+livekit-plugins-openai
+python-dotenv
+supabase
+httpx
