@@ -18,6 +18,8 @@ Neither agent knows anything about the other's internals. The Patient Agent cann
 
 This models what a real deployment might look like: a patient-side AI dials the clinic's phone number, the clinic's AI picks up, and they negotiate an appointment — fully autonomously, no humans involved.
 
+The other requirement for this demo is that it use only free-tier level software: LLMs, DB, TTS, STT, and voice agents. The drove the selection of Deepgram, Livekit, Supabase, and Groq.
+
 ## How the Demo Works
 
 1. Click **Restart Demo** in the web client
