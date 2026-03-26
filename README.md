@@ -2,7 +2,10 @@
 
 A proof-of-concept showing that two AI agents can complete a real-world task — booking a clinic appointment — using only spoken conversation, the same way two people would on a phone call.
 
-https://github.com/mikeshwe/tin_can/raw/main/demo.mp4
+<a href="https://github.com/mikeshwe/tin_can/blob/main/demo.mp4">
+  <img src="demo_screenshot.png" width="500" alt="Watch the demo">
+</a>
+<br><sub>▶ Click to watch the demo video</sub>
 
 ## The Core Idea
 
